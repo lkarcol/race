@@ -1,0 +1,35 @@
+{
+  "name": "interview-survival",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k -n SERVER,WEB -c cyan,magenta \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:client": "vite --host 0.0.0.0",
+    "dev:server": "tsx watch server/index.js",
+    "build": "vite build",
+    "start": "node server/index.js",
+    "test": "node --test tests/*.test.js",
+    "test:multiplayer": "node tests/multiplayer.js",
+    "format": "prettier --write src server shared tests vite.config.js package.json README.md",
+    "format:check": "prettier --check src server shared tests vite.config.js package.json README.md"
+  },
+  "dependencies": {
+    "@colyseus/core": "^0.16.0",
+    "@colyseus/schema": "^3.0.0",
+    "@colyseus/ws-transport": "^0.16.0",
+    "colyseus.js": "^0.16.0",
+    "express": "^4.21.2",
+    "lucide-vue-next": "^0.468.0",
+    "phaser": "^3.90.0",
+    "qrcode": "^1.5.4",
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.1",
+    "concurrently": "^9.1.2",
+    "prettier": "^3.9.10",
+    "tsx": "^4.19.2",
+    "vite": "^6.1.0"
+  }
+}
