@@ -18,13 +18,26 @@ To play on phones, open the host using your computer's LAN URL printed by Vite, 
 ## Play
 
 1. The host creates a six-digit room and shares its code or QR. Up to 40 players join with a name and one of eight illustrated avatars, or a photo cropped and compressed locally to 160 × 160 JPEG.
-2. The host starts the race. Each player answers independently. A correct answer advances immediately; a wrong answer incurs a server-enforced three-second lockout and allows a retry. Faster answers earn more points. Arrival order determines the winners.
-3. Unemployment begins moving after 12 seconds, accelerates over time, and catches players when it reaches their position. A host pause freezes the race, answer scoring clock and remaining penalty time.
-4. The first three to pass all five checkpoints win. The race also ends when no active players remain or after 150 seconds, including classes with fewer than three players. The host sees the podium and can reset the same lobby for another run.
+2. The host starts the race. Each player answers independently. Players clear all questions assigned to a place before moving to the next place with questions. A wrong answer incurs the host’s configured timeout (three seconds by default) and allows a retry. Faster answers earn more points. Arrival order determines the winners.
+3. Unemployment begins moving as soon as the race starts, at a constant speed, and catches players when it reaches their position. A host pause freezes the race, answer scoring clock and remaining penalty time.
+4. The first three to answer the entire quiz and reach SSE win. The original quiz has four questions along the five-location route. The race also ends when no active players remain or after 150 seconds, including classes with fewer than three players. The host sees the podium and can reset the same lobby for another run.
 
-The five stops cover dress code, body language, an elevator pitch, handling weaknesses, and thoughtful employer questions. Correct feedback includes practical explanations; wrong answers offer a hint. The host can browse all questions without receiving the server's answer key.
+The original four questions follow the supplied presentation materials: first-impression percentages, “Decoding the Lexicon,” behavioral clues, and the “Physics Bluff” approach to brain teasers. They have four A–D choices. The body-language question uses four matching SVG pose cards; the first-impression and manhole questions include SVG scene illustrations. Correct feedback uses the supplied explanations, including the final answer on the results screen. Players receive public question content; answer keys and explanations are sent only to the host, with individual explanations revealed to players after correct answers.
 
-The host can adjust **Monster speed** below the map, from **0.5× to 2×** in precise 0.01× increments, before or during a race. Changes apply live while dragging; **Reset to 1×** restores normal speed. During the chase, the monster smoothly accelerates or decelerates toward the selected pace over roughly one second. The server enforces host permissions and integrates movement independently of tick rate, without position jumps. Map movement and the demo also update smoothly. The setting survives race resets within the same room. The 12-second grace period and 150-second race limit stay the same.
+## Custom quiz editor
+
+Open **Quiz editor** on the host dashboard and create a room. In the lobby, you can:
+
+- Add up to **50 questions** across any of the five map places, including SSE. A place can have several questions or none; empty places are passed through. Questions run in route order, then in their listed order within a place. Use the up/down arrows to reorder questions at a place.
+- Edit each title and prompt, add **2–6 answer choices**, mark one correct answer, and optionally provide an explanation.
+- Choose a built-in SVG illustration or upload a JPEG, PNG, or WebP image. Uploads are resized locally to fit 800 × 600, compressed, and included in the room’s question content. Add a description for screen readers.
+- Set **Wrong-answer timeout** to a whole number from **0 to 60 seconds**. Zero allows an immediate retry; pausing freezes any remaining lockout.
+
+Click **Apply quiz & timeout** to validate and synchronize the setup. Quiz changes are locked during a race; reset to the lobby before editing again. The applied quiz and timeout survive race resets and are saved in this browser’s local storage for future rooms. They are not stored in a server database or synced between browsers. **Load original quiz** loads a draft of the original four questions and three-second timeout; click Apply to use it.
+
+The host can adjust **Monster speed** below the map, from **0.5× to 2×** in precise 0.01× increments, before or during a race. **2×** means twice the base chase speed, held constant for the whole race. Changes apply live while dragging; **Reset to 1×** restores normal speed. During the chase, the monster smoothly eases toward the selected pace over a fraction of a second. The server enforces host permissions and integrates movement independently of tick rate, without position jumps. Map movement and the demo also update smoothly. The setting survives race resets within the same room. The 150-second race limit stays the same.
+
+Players see a live chase bar above their question and answer feedback. The monster moves toward their avatar as the gap closes, with an estimated countdown in seconds at the current pace (including speed easing). Correct answers that advance to another place increase the gap; wrong-answer timeouts leave the chase running. Pausing freezes the indicator, and stale connections show “Updating…” instead of an unreliable countdown.
 
 ## Project structure
 
@@ -34,6 +47,9 @@ src/
   style.css                Responsive design system and layouts
   components/
     HostView.vue           Moderator dashboard, question bank and podium
+    QuestionEditor.vue     Host quiz setup, place assignment and timeout
+    QuestionForm.vue       Question, answer, correct choice and image editor
+    QuizArt.vue            Built-in question and behavioral SVG illustrations
     JoinView.vue           Mobile-friendly room joining and avatar selection
     PlayerView.vue         Waiting room, quiz, feedback and personal results
     GameDialogs.vue        Invitations, player profiles and question previews
@@ -46,13 +62,17 @@ src/
   lib/avatars.js           Avatar generation and local photo compression
   lib/format.js            Time formatting and leaderboard ordering
 shared/questions.js        Public questions and checkpoint coordinates
+shared/quizConfig.js       Shared quiz limits, validation and public projection
 server/
   index.js                 Express + Colyseus WebSocket server
   InterviewRoom.js         Room lifecycle, host authorization, Schema sync
   GameEngine.js            Authoritative, independently testable race rules
   answers.js               Server-only answer keys and explanations
+  defaultQuiz.js           Original quiz with private grading configuration
 tests/
   engine.test.js           Deterministic survival, timing and scoring tests
+  quizConfig.test.js        Custom quiz validation, assignments and timeouts
+  room.test.js             Host permissions and private/public content tests
   multiplayer.js           Real multi-client networking integration test
 ```
 

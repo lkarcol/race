@@ -1,5 +1,5 @@
 <script setup>
-import { inject } from "vue";
+import { computed, inject } from "vue";
 import {
   ArrowUpRight,
   ArrowRight,
@@ -30,7 +30,8 @@ import {
 import Avatar from "./Avatar.vue";
 import RaceMap from "./RaceMap.vue";
 import MonsterSpeedControl from "./MonsterSpeedControl.vue";
-import { checkpoints, questions } from "../../shared/questions";
+import QuestionEditor from "./QuestionEditor.vue";
+import { checkpoints } from "../../shared/questions";
 import { formatTime } from "../lib/format";
 const {
   game,
@@ -61,7 +62,13 @@ const {
   viewQuestion,
   inspectPlayer,
   fullScreen,
+  questions,
+  wrongAnswerSeconds,
 } = inject("interview-app");
+const monsterSpeedModel = computed({
+  get: () => monsterSpeed.value,
+  set: (value) => game.setMonsterSpeed(value),
+});
 </script>
 
 <template>
@@ -78,7 +85,10 @@ const {
               <path d="M3 8Q89-2 215 5M14 12Q119 2 203 9" /></svg></span
           ><span class="orange-text">.</span>
         </h1>
-        <p>5 checkpoints. 3 interview spots. One chance to stand out.</p>
+        <p>
+          {{ questions.length }} questions. 3 interview spots. One chance to
+          stand out.
+        </p>
       </div>
       <div class="hero-cards">
         <button
@@ -121,6 +131,7 @@ const {
         <button
           v-for="item in [
             { id: 'race', label: 'Race overview', icon: Flag },
+            { id: 'editor', label: 'Quiz editor', icon: BookOpen },
             { id: 'guide', label: 'How to play', icon: CircleHelp },
           ]"
           :key="item.id"
@@ -250,7 +261,12 @@ const {
             <button
               v-for="(checkpoint, i) in checkpoints"
               :key="checkpoint.name"
-              @click="viewQuestion(i)"
+              :disabled="!questions.some((q) => q.checkpointIndex === i)"
+              @click="
+                viewQuestion(
+                  questions.findIndex((q) => q.checkpointIndex === i),
+                )
+              "
             >
               <span
                 class="checkpoint-icon"
@@ -260,13 +276,11 @@ const {
                 }}</small></span
               ><span class="checkpoint-name">{{ checkpoint.short }}</span
               ><span class="checkpoint-topic">{{
-                [
-                  "Dress code",
-                  "Body language",
-                  "Your intro",
-                  "Tough questions",
-                  "Ask the employer",
-                ][i]
+                questions.some((q) => q.checkpointIndex === i)
+                  ? `${questions.filter((q) => q.checkpointIndex === i).length} question${questions.filter((q) => q.checkpointIndex === i).length === 1 ? "" : "s"}`
+                  : i === checkpoints.length - 1
+                    ? "Finish line"
+                    : "Pass through"
               }}</span>
             </button>
           </div>
@@ -285,9 +299,8 @@ const {
             >
           </div>
           <MonsterSpeedControl
-            :model-value="monsterSpeed"
+            v-model="monsterSpeedModel"
             :disabled="mode !== 'demo' && !connected"
-            @update:model-value="game.setMonsterSpeed"
           />
         </section>
 
@@ -333,7 +346,7 @@ const {
                 ><span v-else>{{
                   !p.connected
                     ? "Reconnecting…"
-                    : `Checkpoint ${Math.min(p.progress + 1, 5)} of 5`
+                    : `${p.questionIndex} / ${questions.length} answered · ${checkpoints[p.progress].short}`
                 }}</span></span
               ><span v-if="p.status !== 'caught'" class="player-score"
                 >{{ p.score.toLocaleString() }}<small>pts</small></span
@@ -382,7 +395,7 @@ const {
                 ? "This is a sample race. Host a game to play with your class."
                 : phase === "lobby"
                   ? `${players.length} of 40 players joined. Start when everyone is here.`
-                  : "Five questions stand between your players and their next opportunity."
+                  : `${questions.length} questions stand between your players and their next opportunity.`
             }}</small></span
           >
         </div>
@@ -428,8 +441,8 @@ const {
           <div>
             <h3>Think fast. Answer right.</h3>
             <p>
-              Correct answers move you forward.<br />Wrong ones cost you 3
-              precious seconds.
+              Clear each place’s questions to move forward.<br />Wrong answers:
+              {{ wrongAnswerSeconds }}-second timeout.
             </p>
           </div>
         </div>
@@ -471,7 +484,7 @@ const {
         >
           <span class="question-number">0{{ i + 1 }}</span
           ><component :is="iconList[i]" :size="27" /><span class="eyebrow">{{
-            checkpoints[i].short
+            checkpoints[question.checkpointIndex].short
           }}</span>
           <h3>{{ question.category }}</h3>
           <p>{{ question.prompt }}</p>
@@ -481,7 +494,7 @@ const {
         </button>
       </div>
     </section>
-    <section v-else class="guide-panel">
+    <section v-else-if="tab === 'guide'" class="guide-panel">
       <div class="section-intro">
         <span class="eyebrow">YOUR GUIDE TO THE FINISH LINE</span>
         <h2>Ready. Set. Get interview ready.</h2>
@@ -502,16 +515,16 @@ const {
           <span>02</span><MessageCircle :size="30" />
           <h3>Make your best move.</h3>
           <p>
-            Answer five interview questions in English. Correct answers advance
-            you instantly. A wrong answer means a 3-second lockout, then another
-            try.
+            Answer {{ questions.length }} interview questions in English. Clear
+            all questions at a place to advance. A wrong answer means a
+            {{ wrongAnswerSeconds }}-second lockout, then another try.
           </p>
         </article>
         <article>
           <span>03</span><Ghost :size="30" />
           <h3>Stay out of the shadows.</h3>
           <p>
-            Unemployment starts moving after 12 seconds and speeds up. When it
+            Unemployment starts moving as soon as the race begins. When it
             reaches your checkpoint, your race is over. Your learning keeps
             going.
           </p>
@@ -520,9 +533,10 @@ const {
           <span>04</span><Trophy :size="30" />
           <h3>Make the top three.</h3>
           <p>
-            The first three players to answer all five questions earn a virtual
-            interview at SSE. The race also ends when no active players remain
-            or after 150 seconds.
+            The first three players to answer all
+            {{ questions.length }} questions earn a virtual interview at SSE.
+            The race also ends when no active players remain or after 150
+            seconds.
           </p>
         </article>
       </div>
@@ -534,6 +548,7 @@ const {
         </p>
       </div>
     </section>
+    <QuestionEditor v-show="tab === 'editor'" />
     <footer class="site-footer">
       <span>Made for the leap from campus to career.</span
       ><span

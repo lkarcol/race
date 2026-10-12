@@ -3,28 +3,24 @@ import { ref, watch, onBeforeUnmount } from "vue";
 import { MONSTER_SPEED } from "../../shared/settings";
 
 const props = defineProps({
-  modelValue: { type: Number, default: MONSTER_SPEED.default },
   disabled: Boolean,
 });
-const emit = defineEmits(["update:modelValue"]);
-const draft = ref(props.modelValue);
+const model = defineModel({ type: Number, default: MONSTER_SPEED.default });
+const draft = ref(model.value);
 let pendingValue = null;
 let sendTimer;
 let lastSentAt = -Infinity;
-watch(
-  () => props.modelValue,
-  (value) => {
-    // Ignore older server acknowledgements while the host is dragging ahead.
-    if (pendingValue !== null && Math.abs(value - pendingValue) > 1e-8) return;
-    pendingValue = null;
-    draft.value = value;
-  },
-);
+watch(model, (value) => {
+  // Ignore older server acknowledgements while the host is dragging ahead.
+  if (pendingValue !== null && Math.abs(value - pendingValue) > 1e-8) return;
+  pendingValue = null;
+  draft.value = value;
+});
 function commit() {
   clearTimeout(sendTimer);
   if (props.disabled) return;
   lastSentAt = Date.now();
-  emit("update:modelValue", draft.value);
+  model.value = draft.value;
 }
 function changeSpeed(event) {
   draft.value = Number(event.target.value);
@@ -47,7 +43,7 @@ watch(
     if (disabled) {
       clearTimeout(sendTimer);
       pendingValue = null;
-      draft.value = props.modelValue;
+      draft.value = model.value;
     }
   },
 );
@@ -86,8 +82,5 @@ onBeforeUnmount(() => clearTimeout(sendTimer));
       />
       <span>Fast</span>
     </div>
-    <p id="monster-speed-help">
-      0.5×–2× · Adjust live. The monster gradually settles into its new pace.
-    </p>
   </div>
 </template>

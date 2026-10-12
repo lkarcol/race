@@ -13,6 +13,7 @@ import {
 } from "lucide-vue-next";
 import Avatar from "./Avatar.vue";
 import OutfitArt from "./OutfitArt.vue";
+import { isPhotoAvatar } from "../lib/avatars";
 
 const {
   code,
@@ -22,6 +23,7 @@ const {
   playerName,
   avatar,
   uploadError,
+  uploadBusy,
   joinGame,
   upload,
 } = inject("interview-app");
@@ -98,17 +100,22 @@ const {
           <Avatar :value="`seed:${i - 1}`" :size="42" />
         </button>
       </div>
-      <label class="upload-button" for="avatar-upload"
+      <label
+        class="upload-button"
+        :class="{ chosen: isPhotoAvatar(avatar), busy: uploadBusy }"
+        for="avatar-upload"
         ><span class="upload-icon"
-          ><Avatar
-            v-if="avatar.startsWith('data:')"
+          ><LoaderCircle v-if="uploadBusy" :size="18" class="spin" /><Avatar
+            v-else-if="isPhotoAvatar(avatar)"
             :value="avatar"
             :size="38" /><Camera v-else :size="22" /></span
         ><span
           ><strong>{{
-            avatar.startsWith("data:")
-              ? "Looking good! Change photo"
-              : "Or make it really you"
+            uploadBusy
+              ? "Preparing your photo…"
+              : isPhotoAvatar(avatar)
+                ? "Looking good! Change photo"
+                : "Or make it really you"
           }}</strong
           ><small>Upload a photo from your gallery or camera</small></span
         ><Upload :size="17" /></label
@@ -116,7 +123,8 @@ const {
         id="avatar-upload"
         class="visually-hidden"
         type="file"
-        accept="image/*"
+        accept="image/*,image/jpeg,image/png,image/heic,image/heif,image/webp"
+        :disabled="uploadBusy"
         @change="upload"
       />
       <p v-if="uploadError" class="field-error" role="alert">
@@ -125,7 +133,7 @@ const {
       <button
         class="button button-dark join-submit"
         type="submit"
-        :disabled="busy || !joinCode.trim() || !playerName.trim()"
+        :disabled="busy || uploadBusy || !joinCode.trim() || !playerName.trim()"
       >
         <LoaderCircle v-if="busy" :size="18" class="spin" />{{
           busy ? "Finding your starting line…" : "Join the race"

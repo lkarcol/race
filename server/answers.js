@@ -1,9 +1,8 @@
 // Deliberately separated from the browser-imported question content.
-export const answers = [1, 1, 1, 1, 1];
+export const answers = [3, 1, 2, 2];
 export const explanations = [
-  "Business casual is a thoughtful default for this scenario: polished, professional, and comfortable. For a real interview, check the company’s dress expectations.",
-  "An upright, relaxed posture and natural eye contact communicate confidence, attention, and respect.",
-  "Connect your education and relevant skills to the role. Keep your introduction focused and concise.",
-  "Self-awareness and concrete steps to improve show that you are honest, reflective, and willing to learn.",
-  "Asking about the work shows curiosity and helps you understand how you could contribute to the team.",
+  "The materials highlight statistics showing that first impressions are determined by visual factors (dressing, acting, walking in) at 55%, voice quality and confidence at 38%, and actual word choice at only 7%.",
+  'In the "Decoding the Lexicon" section of the script, "Fast-paced environment" is decoded as corporate jargon for complete organizational chaos with extremely tight deadlines.',
+  "The behavioral clues grid categorizes sitting back with legs outstretched (and lighting up a cigar) as indicators of an overconfident applicant, whereas foot tapping indicates nervousness and head scratching indicates uncertainty.",
+  'The script suggests surviving brain teasers by using the "Physics Bluff"—confident terminology like geometry or philosophically stating that circles represent infinite enterprise synergy.',
 ];

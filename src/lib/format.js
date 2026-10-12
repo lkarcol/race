@@ -11,6 +11,7 @@ export function rankPlayers(players) {
     if (b.status === "caught" && a.status !== "caught") return -1;
     return (
       b.progress - a.progress ||
+      (b.questionIndex || 0) - (a.questionIndex || 0) ||
       b.score - a.score ||
       a.name.localeCompare(b.name)
     );

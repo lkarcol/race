@@ -3,8 +3,18 @@ import { Client } from "colyseus.js";
 import { rankPlayers } from "../lib/format";
 import { MONSTER_SPEED, isValidMonsterSpeed } from "../../shared/settings";
 import { advanceMonsterMotion } from "../../shared/monsterMotion";
+import { questions as defaultQuestions } from "../../shared/questions";
+import { normalizeQuizConfig, questionPlace } from "../../shared/quizConfig";
 
 const SESSION_KEY = "interview-run-session";
+const QUIZ_KEY = "interview-run-custom-quiz";
+function savedQuiz() {
+  try {
+    return normalizeQuizConfig(JSON.parse(localStorage.getItem(QUIZ_KEY)));
+  } catch {
+    return null;
+  }
+}
 const demoNames = [
   "Alex Morgan",
   "Sofia Kováčová",
@@ -21,6 +31,7 @@ function demoPlayers() {
     name,
     avatar: `seed:${i}`,
     progress: [3, 3, 2, 2, 2, 1, 1, 0][i],
+    questionIndex: [3, 3, 2, 2, 2, 1, 1, 0][i],
     score: [2840, 2610, 1890, 1750, 1640, 920, 810, 0][i],
     status: i === 7 ? "caught" : "active",
     stunUntil: 0,
@@ -36,7 +47,11 @@ export function useGame() {
   const elapsed = ref(84);
   const monster = ref(0.45);
   const monsterSpeed = ref(MONSTER_SPEED.default);
+  const monsterCurrentSpeed = ref(MONSTER_SPEED.default);
+  const monsterBaseSpeed = ref(MONSTER_SPEED.base);
+  const monsterSnapshotAt = ref(performance.now());
   const paused = ref(true);
+  const pausedAt = ref(0);
   const code = ref("482916");
   const sessionId = ref("");
   const feedback = ref(null);
@@ -44,6 +59,17 @@ export function useGame() {
   const busy = ref(false);
   const connected = ref(false);
   const serverTime = ref(Date.now());
+  const questions = ref(
+    defaultQuestions.map((q, i) => ({ ...q, checkpointIndex: i })),
+  );
+  const wrongAnswerSeconds = ref(3);
+  const hostQuiz = ref(null);
+  const defaultQuiz = ref(null);
+  const quizSaving = ref(false);
+  const quizError = ref("");
+  const quizSaved = ref(false);
+  let quizRevision = 0;
+  let saveTimer;
   let room;
   let demoTick = 0;
   let demoCurrentSpeed = MONSTER_SPEED.default;
@@ -79,6 +105,7 @@ export function useGame() {
       name: p.name,
       avatar: p.avatar,
       progress: p.progress,
+      questionIndex: p.questionIndex,
       score: p.score,
       status: p.status,
       stunUntil: p.stunUntil,
@@ -90,9 +117,19 @@ export function useGame() {
     elapsed.value = state.elapsed;
     monster.value = state.monster;
     monsterSpeed.value = state.monsterSpeed;
+    monsterCurrentSpeed.value = state.monsterCurrentSpeed;
+    monsterBaseSpeed.value = state.monsterBaseSpeed;
+    monsterSnapshotAt.value = performance.now();
     paused.value = state.paused;
+    pausedAt.value = state.pausedAt;
     code.value = state.roomCode;
     serverTime.value = state.serverTime;
+    wrongAnswerSeconds.value = state.wrongAnswerSeconds;
+    if (state.quizRevision && state.quizRevision !== quizRevision) {
+      questions.value = JSON.parse(state.quizJson);
+      quizRevision = state.quizRevision;
+      feedback.value = null;
+    }
   }
   function attachRoom(nextRoom, role) {
     room = nextRoom;
@@ -102,11 +139,38 @@ export function useGame() {
     connected.value = true;
     error.value = "";
     feedback.value = null;
+    quizRevision = 0;
+    hostQuiz.value = null;
+    quizSaving.value = false;
+    quizError.value = "";
+    quizSaved.value = false;
     saveSession({ token: room.reconnectionToken, role, code: room.roomId });
     room.onStateChange(applyState);
     room.onMessage("feedback", (message) => {
       feedback.value = message;
     });
+    room.onMessage("quiz-config", (message) => {
+      if (role !== "host") return;
+      hostQuiz.value = message.config;
+      defaultQuiz.value = message.defaults;
+      quizSaving.value = false;
+      clearTimeout(saveTimer);
+      if (message.saved) {
+        quizSaved.value = true;
+        try {
+          localStorage.setItem(QUIZ_KEY, JSON.stringify(message.config));
+        } catch {
+          quizError.value =
+            "Applied to this room, but browser storage is full. The quiz will not be remembered for new rooms.";
+        }
+      }
+    });
+    room.onMessage("quiz-config-error", (message) => {
+      quizSaving.value = false;
+      clearTimeout(saveTimer);
+      quizError.value = message.message;
+    });
+    if (role === "host") room.send("get-quiz-config");
     room.onMessage("host-left", () => {
       hostLeft = true;
       saveSession(null);
@@ -156,7 +220,10 @@ export function useGame() {
       saveSession(null);
       const nextRoom =
         action === "host"
-          ? await client.create("interview", { role: "host" })
+          ? await client.create("interview", {
+              role: "host",
+              quizConfig: savedQuiz(),
+            })
           : await client.joinById(options.code.replace(/\s/g, ""), {
               role: "player",
               name: options.name,
@@ -222,6 +289,24 @@ export function useGame() {
     else if (mode.value === "host" && connected.value)
       room?.send("monster-speed", { multiplier });
   }
+  function configureQuiz(config) {
+    if (mode.value !== "host" || !connected.value || quizSaving.value) return;
+    quizError.value = "";
+    quizSaved.value = false;
+    try {
+      const normalized = normalizeQuizConfig(config);
+      quizSaving.value = true;
+      room.send("configure-quiz", normalized);
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => {
+        quizSaving.value = false;
+        quizError.value =
+          "The save was not confirmed. Reconnect and try again.";
+      }, 10000);
+    } catch (error) {
+      quizError.value = error.message;
+    }
+  }
   function reset() {
     feedback.value = null;
     if (mode.value === "demo") {
@@ -238,7 +323,7 @@ export function useGame() {
     if (me.value && connected.value) {
       feedback.value = null;
       room?.send("answer", {
-        questionIndex: me.value.progress,
+        questionIndex: me.value.questionIndex,
         optionIndex: index,
       });
     }
@@ -263,7 +348,7 @@ export function useGame() {
       speed: demoCurrentSpeed,
       target: monsterSpeed.value,
       seconds,
-      acceleration: 0,
+      baseSpeed: MONSTER_SPEED.base,
     });
     demoCurrentSpeed = motion.speed;
     monster.value += motion.distance;
@@ -273,9 +358,10 @@ export function useGame() {
         (p) => p.status === "active",
       );
       if (next) {
-        next.progress++;
+        next.questionIndex++;
+        next.progress = questionPlace(questions.value, next.questionIndex);
         next.score += 850;
-        if (next.progress >= 5) {
+        if (next.questionIndex >= questions.value.length) {
           next.status = "finished";
           next.rank = winners.value.length + 1;
           next.finishedAt = elapsed.value;
@@ -295,6 +381,7 @@ export function useGame() {
   onUnmounted(() => {
     disposed = true;
     clearInterval(timer);
+    clearTimeout(saveTimer);
     // Preserve the reserved seat during a component refresh / hot update.
     room?.leave(false);
   });
@@ -305,7 +392,11 @@ export function useGame() {
     elapsed,
     monster,
     monsterSpeed,
+    monsterCurrentSpeed,
+    monsterBaseSpeed,
+    monsterSnapshotAt,
     paused,
+    pausedAt,
     code,
     sessionId,
     feedback,
@@ -317,10 +408,18 @@ export function useGame() {
     winners,
     active,
     serverTime,
+    questions,
+    wrongAnswerSeconds,
+    hostQuiz,
+    defaultQuiz,
+    quizSaving,
+    quizError,
+    quizSaved,
     connect,
     start,
     togglePause,
     setMonsterSpeed,
+    configureQuiz,
     reset,
     answer,
     leave,

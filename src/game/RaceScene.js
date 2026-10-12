@@ -124,7 +124,7 @@ export class RaceScene extends Phaser.Scene {
       const offset = clusterOffsets[group % clusterOffsets.length];
       const extra = Math.floor(group / clusterOffsets.length) * 17;
       const targetX =
-        checkpoint.x + offset[0] + (player.progress === 5 ? 31 : 0);
+        checkpoint.x + offset[0] + (player.status === "finished" ? 31 : 0);
       const targetY = checkpoint.y + offset[1] - 12 - extra;
       const lerp = Math.min(1, delta / 170);
       pin.container.x = Phaser.Math.Linear(pin.container.x, targetX, lerp);

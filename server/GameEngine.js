@@ -1,11 +1,14 @@
-import { answers, explanations } from "./answers.js";
 import { MONSTER_SPEED, isValidMonsterSpeed } from "../shared/settings.js";
 import { advanceMonsterMotion } from "../shared/monsterMotion.js";
+import {
+  normalizeQuizConfig,
+  publicQuestions,
+  questionPlace,
+} from "../shared/quizConfig.js";
+import { defaultQuiz } from "./defaultQuiz.js";
 
 export const RULES = Object.freeze({
-  grace: 12,
-  monsterSpeed: 0.032,
-  acceleration: 0.0001,
+  monsterSpeed: MONSTER_SPEED.base,
   stunMs: 3000,
   maxSeconds: 150,
   seats: 3,
@@ -26,6 +29,10 @@ export class GameEngine {
     this.paused = false;
     this.lastTick = this.now();
     this.finishOrder = 0;
+    this.quiz = defaultQuiz();
+    this.quiz.wrongAnswerSeconds = this.rules.stunMs / 1000;
+    this.questions = publicQuestions(this.quiz);
+    this.quizRevision = 1;
   }
   addPlayer(id, name, avatar = "seed:0") {
     if (this.phase !== "lobby")
@@ -43,6 +50,7 @@ export class GameEngine {
       name: cleanName,
       avatar,
       progress: 0,
+      questionIndex: 0,
       score: 0,
       status: "active",
       stunUntil: 0,
@@ -59,8 +67,10 @@ export class GameEngine {
     if (this.phase !== "lobby" || !this.players.size) return false;
     this.phase = "racing";
     this.lastTick = this.now();
-    for (const player of this.players.values())
+    for (const player of this.players.values()) {
       player.questionStarted = this.now();
+      player.progress = questionPlace(this.questions, 0);
+    }
     return true;
   }
   togglePause() {
@@ -83,9 +93,18 @@ export class GameEngine {
     this.tick();
     if (this.phase === "finished") return false;
     this.monsterSpeed = multiplier;
-    if (this.phase === "lobby" || this.elapsed <= this.rules.grace)
-      this.monsterCurrentSpeed = multiplier;
+    if (this.phase === "lobby") this.monsterCurrentSpeed = multiplier;
     return true;
+  }
+  configureQuiz(config) {
+    if (this.phase !== "lobby")
+      throw new Error("Reset the race to edit the quiz.");
+    const next = normalizeQuizConfig(config);
+    this.quiz = next;
+    this.questions = publicQuestions(next);
+    this.rules.stunMs = next.wrongAnswerSeconds * 1000;
+    this.quizRevision++;
+    return next;
   }
   answer(id, questionIndex, optionIndex) {
     this.tick(); // Resolve catches before processing an answer arriving on the same tick.
@@ -99,13 +118,16 @@ export class GameEngine {
       };
     if (
       !Number.isInteger(questionIndex) ||
-      questionIndex !== p.progress ||
+      questionIndex !== p.questionIndex ||
+      questionIndex < 0 ||
+      questionIndex >= this.questions.length ||
       !Number.isInteger(optionIndex) ||
       optionIndex < 0 ||
-      optionIndex > 2
+      optionIndex >= this.questions[questionIndex].options.length
     )
       return { accepted: false, message: "That question has already changed." };
-    const correct = optionIndex === answers[questionIndex];
+    const question = this.quiz.questions[questionIndex];
+    const correct = optionIndex === question.correctIndex;
     p.attempts++;
     if (correct) {
       const seconds = (this.now() - p.questionStarted) / 1000;
@@ -113,24 +135,27 @@ export class GameEngine {
         100,
         1000 - Math.floor(seconds * 15) - (p.attempts - 1) * 150,
       );
-      p.progress++;
+      p.questionIndex++;
+      p.progress = questionPlace(this.questions, p.questionIndex);
       p.questionStarted = this.now();
       p.attempts = 0;
       p.stunUntil = 0;
-      if (p.progress === 5) {
+      if (p.questionIndex === this.questions.length) {
         p.status = "finished";
         p.finishedAt = this.elapsed;
         p.rank = ++this.finishOrder;
       }
-    } else p.stunUntil = this.now() + this.rules.stunMs;
+    } else p.stunUntil = this.rules.stunMs ? this.now() + this.rules.stunMs : 0;
     this.checkEnd();
     return {
       accepted: true,
       correct,
       questionIndex,
       explanation: correct
-        ? explanations[questionIndex]
-        : "Not quite. You have a 3-second penalty. Consider the professional, respectful choice and try again.",
+        ? question.explanation || "Correct! Keep going."
+        : this.rules.stunMs
+          ? `Not quite. You have a ${this.rules.stunMs / 1000}-second penalty. Think back to the question and try again.`
+          : "Not quite. Think back to the question and try again.",
       stunUntil: p.stunUntil,
     };
   }
@@ -140,18 +165,14 @@ export class GameEngine {
       this.lastTick = current;
       return;
     }
-    const previousElapsed = this.elapsed;
-    this.elapsed += Math.max(0, current - this.lastTick) / 1000;
+    const seconds = Math.max(0, current - this.lastTick) / 1000;
+    this.elapsed += seconds;
     this.lastTick = current;
-    const from = Math.max(0, previousElapsed - this.rules.grace);
-    const to = Math.max(0, this.elapsed - this.rules.grace);
     const motion = advanceMonsterMotion({
       speed: this.monsterCurrentSpeed,
       target: this.monsterSpeed,
-      seconds: to - from,
-      chaseSeconds: from,
+      seconds,
       baseSpeed: this.rules.monsterSpeed,
-      acceleration: this.rules.acceleration,
     });
     this.monsterCurrentSpeed = motion.speed;
     this.monster += motion.distance;
@@ -186,6 +207,7 @@ export class GameEngine {
     for (const p of this.players.values())
       Object.assign(p, {
         progress: 0,
+        questionIndex: 0,
         score: 0,
         status: "active",
         stunUntil: 0,

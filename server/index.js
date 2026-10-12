@@ -17,7 +17,7 @@ app.get("*", (_req, res) => res.sendFile(path.join(dist, "index.html")));
 const server = new Server({
   transport: new WebSocketTransport({
     server: createServer(app),
-    maxPayload: 100 * 1024,
+    maxPayload: 2 * 1024 * 1024,
   }),
 });
 server.define("interview", InterviewRoom);

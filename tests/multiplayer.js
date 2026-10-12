@@ -1,5 +1,7 @@
 // Integration test against a running server. No browser or testing framework needed.
 import assert from "node:assert/strict";
+import { answers } from "../server/answers.js";
+import { questions } from "../shared/questions.js";
 import { Client } from "colyseus.js";
 const endpoint =
   process.argv[2] || process.env.TEST_SERVER_URL || "ws://127.0.0.1:2567";
@@ -64,8 +66,8 @@ try {
   assert.equal((await sendAnswer(players[3], 0, 0)).correct, false);
   assert.equal((await sendAnswer(players[3], 0, 1)).accepted, false);
   for (let p = 0; p < 3; p++)
-    for (let q = 0; q < 5; q++) {
-      assert.equal((await sendAnswer(players[p], q, 1)).correct, true);
+    for (let q = 0; q < questions.length; q++) {
+      assert.equal((await sendAnswer(players[p], q, answers[q])).correct, true);
       await until(
         () => host.state.players.get(players[p].sessionId).progress === q + 1,
         "answer reflected on host",

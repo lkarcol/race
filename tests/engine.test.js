@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { answers } from "../server/answers.js";
+import { questions, checkpoints } from "../shared/questions.js";
 import { GameEngine } from "../server/GameEngine.js";
+import { MONSTER_SPEED } from "../shared/settings.js";
+
+const BASE = MONSTER_SPEED.base;
 
 function fixture(rules = {}) {
   let time = 100000;
@@ -14,9 +19,48 @@ function fixture(rules = {}) {
   };
 }
 function finish(engine, id) {
-  for (let i = 0; i < 5; i++)
-    assert.equal(engine.answer(id, i, 1).correct, true);
+  for (let i = 0; i < questions.length; i++)
+    assert.equal(engine.answer(id, i, answers[i]).correct, true);
 }
+
+test("the four supplied questions use D, B, C, C and finish at SSE", () => {
+  assert.deepEqual(answers, [3, 1, 2, 2]);
+  assert.equal(questions.length, 4);
+  assert.ok(questions.every((q) => q.options.length === 4));
+  const { engine } = fixture();
+  engine.addPlayer("p", "Alex");
+  engine.start();
+  for (let q = 0; q < questions.length; q++) {
+    const feedback = engine.answer("p", q, answers[q]);
+    assert.equal(feedback.correct, true);
+    assert.ok(feedback.explanation.length > 0);
+    assert.equal(
+      engine.players.get("p").status,
+      q === 3 ? "finished" : "active",
+    );
+  }
+  assert.equal(checkpoints[engine.players.get("p").progress].short, "SSE");
+  assert.equal(engine.answer("p", 4, 0).accepted, false);
+});
+
+test("every A–D option is accepted and graded against its own question", () => {
+  for (let q = 0; q < questions.length; q++) {
+    for (let option = 0; option < 4; option++) {
+      const { engine } = fixture();
+      engine.addPlayer("p", "Alex");
+      engine.start();
+      for (let prior = 0; prior < q; prior++)
+        engine.answer("p", prior, answers[prior]);
+      const feedback = engine.answer("p", q, option);
+      assert.equal(feedback.accepted, true);
+      assert.equal(feedback.correct, option === answers[q]);
+      assert.equal(
+        engine.players.get("p").progress,
+        q + (option === answers[q] ? 1 : 0),
+      );
+    }
+  }
+});
 
 test("validates and sanitizes player names and rejects late joins", () => {
   const { engine } = fixture();
@@ -29,9 +73,9 @@ test("a race requires a player and answers require a running race", () => {
   const { engine } = fixture();
   assert.equal(engine.start(), false);
   engine.addPlayer("p", "Alex");
-  assert.equal(engine.answer("p", 0, 1).accepted, false);
+  assert.equal(engine.answer("p", 0, answers[0]).accepted, false);
   engine.start();
-  assert.equal(engine.answer("p", 0, 1).correct, true);
+  assert.equal(engine.answer("p", 0, answers[0]).correct, true);
   assert.equal(engine.players.get("p").progress, 1);
 });
 test("stale, skipped, duplicate and malformed answers cannot advance a player", () => {
@@ -41,14 +85,14 @@ test("stale, skipped, duplicate and malformed answers cannot advance a player", 
   for (const [question, answer] of [
     [1, 1],
     [0, -1],
-    [0, 3],
+    [0, 4],
     [0, "1"],
     ["0", 1],
     [null, 1],
   ])
     assert.equal(engine.answer("p", question, answer).accepted, false);
-  engine.answer("p", 0, 1);
-  assert.equal(engine.answer("p", 0, 1).accepted, false);
+  engine.answer("p", 0, answers[0]);
+  assert.equal(engine.answer("p", 0, answers[0]).accepted, false);
   assert.equal(engine.players.get("p").progress, 1);
 });
 test("wrong answers impose a full three-second lockout and permit a retry", () => {
@@ -58,9 +102,9 @@ test("wrong answers impose a full three-second lockout and permit a retry", () =
   assert.equal(engine.answer("p", 0, 0).correct, false);
   assert.equal(engine.players.get("p").progress, 0);
   advance(2999);
-  assert.equal(engine.answer("p", 0, 1).accepted, false);
+  assert.equal(engine.answer("p", 0, answers[0]).accepted, false);
   advance(1);
-  assert.equal(engine.answer("p", 0, 1).correct, true);
+  assert.equal(engine.answer("p", 0, answers[0]).correct, true);
   assert.equal(engine.players.get("p").score, 805);
 });
 test("pausing freezes the race, scoring clock and remaining penalty", () => {
@@ -72,22 +116,22 @@ test("pausing freezes the race, scoring clock and remaining penalty", () => {
   engine.togglePause();
   advance(20000);
   assert.equal(engine.elapsed, 1);
-  assert.equal(engine.answer("p", 0, 1).accepted, false);
+  assert.equal(engine.answer("p", 0, answers[0]).accepted, false);
   engine.togglePause();
   advance(1999);
-  assert.equal(engine.answer("p", 0, 1).accepted, false);
+  assert.equal(engine.answer("p", 0, answers[0]).accepted, false);
   advance(1);
-  assert.equal(engine.answer("p", 0, 1).correct, true);
+  assert.equal(engine.answer("p", 0, answers[0]).correct, true);
   assert.equal(engine.players.get("p").score, 805);
 });
-test("the shadow respects its grace period then eliminates trailing players", () => {
+test("the shadow starts with the race and eliminates trailing players", () => {
   const { engine, advance } = fixture();
   engine.addPlayer("p", "Alex");
   engine.start();
-  advance(12000);
-  assert.equal(engine.monster, -0.65);
+  advance(1000);
+  assert.ok(engine.monster > -0.65);
   assert.equal(engine.players.get("p").status, "active");
-  advance(20000);
+  advance(3000);
   assert.equal(engine.players.get("p").status, "caught");
   assert.equal(engine.phase, "finished");
 });
@@ -97,7 +141,7 @@ test("a catch at the current time resolves before a late answer", () => {
   engine.addPlayer("p", "Alex");
   engine.start();
   time += 40000;
-  assert.equal(engine.answer("p", 0, 1).accepted, false);
+  assert.equal(engine.answer("p", 0, answers[0]).accepted, false);
   assert.equal(engine.players.get("p").status, "caught");
 });
 test("first three finishers claim seats in arrival order; fourth cannot finish", () => {
@@ -124,7 +168,7 @@ test("a smaller class ends cleanly when all remaining players finish", () => {
   assert.equal(engine.players.get("p").status, "finished");
 });
 test("race timeout eliminates active players even if a custom monster is slow", () => {
-  const { engine, advance } = fixture({ monsterSpeed: 0, acceleration: 0 });
+  const { engine, advance } = fixture({ monsterSpeed: 0 });
   engine.addPlayer("p", "Alex");
   engine.start();
   advance(150000);
@@ -135,7 +179,7 @@ test("reset retains identity and clears scores, status, penalties and race timin
   const { engine, advance } = fixture();
   engine.addPlayer("p", "Alex", "seed:3");
   engine.start();
-  engine.answer("p", 0, 1);
+  engine.answer("p", 0, answers[0]);
   engine.answer("p", 1, 0);
   advance(1000);
   engine.reset();
@@ -155,9 +199,9 @@ test("faster correct answers score higher and capacity is enforced", () => {
   engine.addPlayer("b", "Sofia");
   assert.throws(() => engine.addPlayer("c", "Nina"));
   engine.start();
-  engine.answer("a", 0, 1);
+  engine.answer("a", 0, answers[0]);
   advance(1000);
-  engine.answer("b", 0, 1);
+  engine.answer("b", 0, answers[0]);
   assert.ok(engine.players.get("a").score > engine.players.get("b").score);
 });
 
@@ -174,16 +218,20 @@ test("monster speed accepts bounded hundredth-step numeric multipliers", () => {
   }
 });
 
-test("slow and fast speeds scale chase distance while preserving the grace period", () => {
+test("slow and fast speeds scale a constant chase distance from the moment the race starts", () => {
   const runs = [0.5, 1, 2].map((speed) => {
     const run = fixture();
     run.engine.addPlayer("p", "Alex");
     run.engine.setMonsterSpeed(speed);
     run.engine.start();
-    run.advance(12000);
     assert.equal(run.engine.monster, -0.65);
-    run.advance(5000);
-    return run.engine.monster + 0.65;
+    run.advance(1000);
+    const first = run.engine.monster + 0.65;
+    run.advance(1000);
+    const second = run.engine.monster + 0.65 - first;
+    assert.ok(Math.abs(first - BASE * speed * 1) < 1e-10);
+    assert.ok(Math.abs(second - first) < 1e-10);
+    return first;
   });
   assert.ok(Math.abs(runs[0] * 2 - runs[1]) < 1e-10);
   assert.ok(Math.abs(runs[1] * 2 - runs[2]) < 1e-10);
@@ -193,14 +241,14 @@ test("live speed changes preserve position and ease into the requested pace", ()
   const { engine, advance } = fixture();
   engine.addPlayer("p", "Alex");
   engine.start();
-  advance(17000);
+  advance(1000);
   const before = engine.monster;
   engine.setMonsterSpeed(2);
   assert.equal(engine.monster, before);
   assert.equal(engine.monsterCurrentSpeed, 1);
   advance(1000);
   const fastDistance = engine.monster - before;
-  const normalDistance = 0.032 + 11 * 0.0001;
+  const normalDistance = BASE;
   assert.ok(fastDistance > normalDistance && fastDistance < 2 * normalDistance);
   assert.ok(engine.monsterCurrentSpeed > 1.9 && engine.monsterCurrentSpeed < 2);
   const beforeSlow = engine.monster;
@@ -219,13 +267,13 @@ test("speed changes while paused freeze position and persist into the next race"
   const { engine, advance } = fixture();
   engine.addPlayer("p", "Alex");
   engine.start();
-  advance(17000);
+  advance(2000);
   engine.togglePause();
   const before = engine.monster;
   engine.setMonsterSpeed(0.5);
   advance(10000);
   assert.equal(engine.monster, before);
-  assert.equal(engine.elapsed, 17);
+  assert.equal(engine.elapsed, 2);
   engine.togglePause();
   advance(1000);
   assert.ok(engine.monster > before);
@@ -239,9 +287,7 @@ test("speed changes resolve pending movement at the previous speed", () => {
   const engine = new GameEngine(() => time);
   engine.addPlayer("p", "Alex");
   engine.start();
-  time += 17000;
+  time += 2000;
   engine.setMonsterSpeed(2);
-  assert.ok(
-    Math.abs(engine.monster - (-0.65 + 5 * 0.032 + 25 * 0.0001)) < 1e-10,
-  );
+  assert.ok(Math.abs(engine.monster - (-0.65 + 2 * BASE)) < 1e-10);
 });

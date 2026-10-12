@@ -27,8 +27,8 @@ import JoinView from "./components/JoinView.vue";
 import PlayerView from "./components/PlayerView.vue";
 import GameDialogs from "./components/GameDialogs.vue";
 import { useGame } from "./composables/useGame";
-import { checkpoints, questions } from "../shared/questions";
-import { resizePhoto } from "./lib/avatars";
+import { checkpoints } from "../shared/questions";
+import { isPhotoAvatar, resizePhoto } from "./lib/avatars";
 
 const game = useGame();
 const {
@@ -39,6 +39,7 @@ const {
   monster,
   monsterSpeed,
   paused,
+  pausedAt,
   code,
   feedback,
   error,
@@ -49,6 +50,8 @@ const {
   winners,
   active,
   serverTime,
+  questions,
+  wrongAnswerSeconds,
 } = game;
 const screen = ref(
   location.pathname === "/join" ||
@@ -67,6 +70,7 @@ const joinCode = ref(new URLSearchParams(location.search).get("room") || "");
 const playerName = ref("");
 const avatar = ref("seed:0");
 const uploadError = ref("");
+const uploadBusy = ref(false);
 const showFeedback = ref(false);
 const submitPending = ref(false);
 const chosenOption = ref(-1);
@@ -74,22 +78,25 @@ const localTime = ref(Date.now());
 const iconList = [GraduationCap, Hand, MessageCircle, Lightbulb, Building2];
 const joinUrl = computed(() => `${location.origin}/join?room=${code.value}`);
 const currentQuestion = computed(
-  () => questions[Math.min(me.value?.progress || 0, 4)],
+  () =>
+    questions.value[
+      Math.min(me.value?.questionIndex || 0, questions.value.length - 1)
+    ],
 );
 const stunnedSeconds = computed(() =>
   Math.max(
     0,
     Math.ceil(
       ((me.value?.stunUntil || 0) -
-        (paused.value
-          ? serverTime.value
-          : localTime.value + clockOffset.value)) /
+        (paused.value ? pausedAt.value : localTime.value + clockOffset.value)) /
         1000,
     ),
   ),
 );
 const clockOffset = ref(0);
-const focusedQuestion = computed(() => questions[selectedCheckpoint.value]);
+const focusedQuestion = computed(
+  () => questions.value[selectedCheckpoint.value],
+);
 const playerDetail = computed(() =>
   players.value.find((p) => p.id === selectedPlayer.value),
 );
@@ -177,6 +184,10 @@ async function hostGame() {
   }
 }
 async function joinGame() {
+  if (avatar.value.startsWith("data:") && !isPhotoAvatar(avatar.value)) {
+    uploadError.value = "That photo couldn't be used. Try another picture.";
+    return;
+  }
   const success = await game.connect("player", {
     code: joinCode.value,
     name: playerName.value,
@@ -188,13 +199,18 @@ async function joinGame() {
   }
 }
 async function upload(event) {
-  uploadError.value = "";
-  try {
-    avatar.value = await resizePhoto(event.target.files?.[0]);
-  } catch (e) {
-    uploadError.value = e.message;
-  }
+  const file = event.target.files?.[0];
   event.target.value = "";
+  if (!file) return;
+  uploadError.value = "";
+  uploadBusy.value = true;
+  try {
+    avatar.value = await resizePhoto(file);
+  } catch (e) {
+    uploadError.value = e.message || "Couldn't use that photo.";
+  } finally {
+    uploadBusy.value = false;
+  }
 }
 function submitAnswer(index) {
   if (
@@ -229,6 +245,7 @@ async function copyInvite() {
   }
 }
 function viewQuestion(index) {
+  if (!questions.value[index]) return;
   selectedCheckpoint.value = index;
   modal.value = "question";
 }
@@ -297,6 +314,8 @@ provide("interview-app", {
   winners,
   active,
   serverTime,
+  questions,
+  wrongAnswerSeconds,
   screen,
   tab,
   modal,
@@ -309,6 +328,7 @@ provide("interview-app", {
   playerName,
   avatar,
   uploadError,
+  uploadBusy,
   showFeedback,
   submitPending,
   chosenOption,

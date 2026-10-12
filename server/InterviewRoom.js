@@ -1,7 +1,13 @@
 import { Room, ServerError } from "@colyseus/core";
-import { Schema, MapSchema, defineTypes } from "@colyseus/schema";
+import { Schema, MapSchema, defineTypes, Encoder } from "@colyseus/schema";
 import { randomInt } from "node:crypto";
 import { GameEngine } from "./GameEngine.js";
+import { normalizeAvatar } from "../shared/avatars.js";
+import { defaultQuiz } from "./defaultQuiz.js";
+
+// Photo avatars are JPEG data URLs. The default 8 KB encoder buffer overflows
+// as soon as one custom face is synced to the room.
+Encoder.BUFFER_SIZE = 4 * 1024 * 1024;
 
 class PlayerState extends Schema {}
 defineTypes(PlayerState, {
@@ -9,6 +15,7 @@ defineTypes(PlayerState, {
   name: "string",
   avatar: "string",
   progress: "number",
+  questionIndex: "number",
   score: "number",
   status: "string",
   stunUntil: "number",
@@ -24,9 +31,15 @@ class RaceState extends Schema {
     this.elapsed = 0;
     this.monster = -0.65;
     this.monsterSpeed = 1;
+    this.monsterCurrentSpeed = 1;
+    this.monsterBaseSpeed = 0;
     this.paused = false;
+    this.pausedAt = 0;
     this.roomCode = "";
     this.serverTime = Date.now();
+    this.quizJson = "[]";
+    this.quizRevision = 0;
+    this.wrongAnswerSeconds = 3;
   }
 }
 defineTypes(RaceState, {
@@ -35,16 +48,29 @@ defineTypes(RaceState, {
   elapsed: "number",
   monster: "number",
   monsterSpeed: "number",
+  monsterCurrentSpeed: "number",
+  monsterBaseSpeed: "number",
   paused: "boolean",
+  pausedAt: "number",
   roomCode: "string",
   serverTime: "number",
+  quizJson: "string",
+  quizRevision: "number",
+  wrongAnswerSeconds: "number",
 });
 
 export class InterviewRoom extends Room {
   maxClients = 41;
-  onCreate() {
+  onCreate(options = {}) {
     this.roomId = String(randomInt(100000, 1000000));
     this.engine = new GameEngine();
+    if (options.quizConfig) {
+      try {
+        this.engine.configureQuiz(options.quizConfig);
+      } catch (error) {
+        throw new ServerError(400, error.message);
+      }
+    }
     this.setState(new RaceState());
     this.state.roomCode = this.roomId;
     this.setPatchRate(100);
@@ -63,6 +89,27 @@ export class InterviewRoom extends Room {
     this.onMessage("monster-speed", (client, message) => {
       if (!this.isHost(client)) return;
       if (this.engine.setMonsterSpeed(message?.multiplier)) this.sync();
+    });
+    this.onMessage("get-quiz-config", (client) => {
+      if (this.isHost(client))
+        client.send("quiz-config", {
+          config: this.engine.quiz,
+          defaults: defaultQuiz(),
+        });
+    });
+    this.onMessage("configure-quiz", (client, config) => {
+      if (!this.isHost(client)) return;
+      try {
+        this.engine.configureQuiz(config);
+        this.sync();
+        client.send("quiz-config", {
+          config: this.engine.quiz,
+          defaults: defaultQuiz(),
+          saved: true,
+        });
+      } catch (error) {
+        client.send("quiz-config-error", { message: error.message });
+      }
     });
     this.onMessage("reset", (client) => {
       if (!this.isHost(client)) return;
@@ -94,14 +141,9 @@ export class InterviewRoom extends Room {
     else if (options.role === "host")
       throw new ServerError(403, "This room already has a host.");
     else {
-      let avatar = String(options.avatar ?? "seed:0");
-      if (
-        !/^seed:[0-7]$/.test(avatar) &&
-        (!/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(avatar) ||
-          avatar.length > 70000)
-      )
-        avatar = "seed:0";
+      let avatar;
       try {
+        avatar = normalizeAvatar(options.avatar);
         this.engine.addPlayer(client.sessionId, options.name, avatar);
       } catch (error) {
         throw new ServerError(400, error.message);
@@ -144,9 +186,17 @@ export class InterviewRoom extends Room {
       elapsed: this.engine.elapsed,
       monster: this.engine.monster,
       monsterSpeed: this.engine.monsterSpeed,
+      monsterCurrentSpeed: this.engine.monsterCurrentSpeed,
+      monsterBaseSpeed: this.engine.rules.monsterSpeed,
       paused: this.engine.paused,
+      pausedAt: this.engine.paused ? this.engine.pausedAt : 0,
       serverTime: Date.now(),
+      wrongAnswerSeconds: this.engine.rules.stunMs / 1000,
     });
+    if (this.state.quizRevision !== this.engine.quizRevision) {
+      this.state.quizJson = JSON.stringify(this.engine.questions);
+      this.state.quizRevision = this.engine.quizRevision;
+    }
     for (const [id, player] of this.engine.players) {
       if (!this.state.players.has(id))
         this.state.players.set(id, new PlayerState());
@@ -156,6 +206,7 @@ export class InterviewRoom extends Room {
         "name",
         "avatar",
         "progress",
+        "questionIndex",
         "score",
         "status",
         "stunUntil",

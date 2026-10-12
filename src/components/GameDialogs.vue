@@ -14,8 +14,8 @@ import {
   ExternalLink,
 } from "lucide-vue-next";
 import Avatar from "./Avatar.vue";
-import OutfitArt from "./OutfitArt.vue";
-import { checkpoints, questions } from "../../shared/questions";
+import QuizArt from "./QuizArt.vue";
+import { checkpoints } from "../../shared/questions";
 const {
   game,
   players,
@@ -23,6 +23,8 @@ const {
   active,
   screen,
   modal,
+  questions,
+  wrongAnswerSeconds,
   selectedCheckpoint,
   copied,
   qr,
@@ -90,11 +92,20 @@ const {
         >
         <template v-else-if="modal === 'question'"
           ><span class="eyebrow"
-            >CHECKPOINT {{ selectedCheckpoint + 1 }} ·
-            {{ checkpoints[selectedCheckpoint].name }}</span
+            >QUESTION {{ selectedCheckpoint + 1 }} ·
+            {{ checkpoints[focusedQuestion.checkpointIndex].name }}</span
           >
           <h2>{{ focusedQuestion.title }}</h2>
           <p>{{ focusedQuestion.prompt }}</p>
+          <img
+            v-if="focusedQuestion.image"
+            class="quiz-uploaded-image"
+            :src="focusedQuestion.image"
+            :alt="focusedQuestion.imageAlt" />
+          <QuizArt
+            v-else-if="focusedQuestion.illustration"
+            :kind="focusedQuestion.illustration"
+            class="quiz-context-art" />
           <div
             :class="[
               'question-modal-options',
@@ -105,10 +116,12 @@ const {
               v-for="(option, i) in focusedQuestion.options"
               :key="option.label"
             >
-              <OutfitArt
+              <QuizArt
                 v-if="option.illustration"
                 :kind="option.illustration"
-              /><span class="option-letter">{{ ["A", "B", "C"][i] }}</span
+              /><span class="option-letter">{{
+                String.fromCharCode(65 + i)
+              }}</span
               ><strong>{{ option.label }}</strong
               ><small v-if="option.detail">{{ option.detail }}</small>
             </div>
@@ -120,10 +133,10 @@ const {
               @click="selectedCheckpoint--"
             >
               <ArrowLeft :size="15" /> Previous</button
-            ><span>{{ selectedCheckpoint + 1 }} / 5</span
+            ><span>{{ selectedCheckpoint + 1 }} / {{ questions.length }}</span
             ><button
               class="button button-dark"
-              :disabled="selectedCheckpoint === 4"
+              :disabled="selectedCheckpoint === questions.length - 1"
               @click="selectedCheckpoint++"
             >
               Next <ArrowRight :size="15" />
@@ -155,7 +168,9 @@ const {
               ><span>POINTS</span>
             </div>
             <div>
-              <strong>{{ playerDetail.progress }} / 5</strong
+              <strong
+                >{{ playerDetail.questionIndex }} /
+                {{ questions.length }}</strong
               ><span>PASSED</span>
             </div>
           </div>
@@ -166,7 +181,7 @@ const {
         >
         <template v-else-if="modal === 'guide'"
           ><span class="eyebrow">A QUICK HEAD START</span>
-          <h2>Five questions. Three opportunities.</h2>
+          <h2>{{ questions.length }} questions. Three opportunities.</h2>
           <div class="quick-guide">
             <p>
               <QrCode :size="23" /><span
@@ -178,15 +193,16 @@ const {
             <p>
               <Zap :size="23" /><span
                 ><strong>Make every answer count.</strong>Right answers move you
-                ahead. Wrong answers lock you out for 3 seconds. Unemployment
-                starts chasing after 12 seconds.</span
+                ahead after you clear a place. Wrong answers lock you out for
+                {{ wrongAnswerSeconds }} seconds. Unemployment starts chasing as
+                soon as the race begins.</span
               >
             </p>
             <p>
               <Trophy :size="23" /><span
-                ><strong>Be one of the first three at SSE.</strong>Pass all five
-                checkpoints to earn a virtual interview. If the shadow reaches
-                your checkpoint, you’re caught!</span
+                ><strong>Be one of the first three at SSE.</strong>Answer all
+                {{ questions.length }} questions to earn a virtual interview. If
+                the shadow reaches your checkpoint, you’re caught!</span
               >
             </p>
           </div>

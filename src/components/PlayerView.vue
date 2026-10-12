@@ -1,5 +1,5 @@
 <script setup>
-import { inject } from "vue";
+import { computed, inject } from "vue";
 import {
   ArrowRight,
   Trophy,
@@ -10,18 +10,21 @@ import {
   Pause,
   Ghost,
   LoaderCircle,
-  Zap,
   CheckCircle2,
 } from "lucide-vue-next";
 import Avatar from "./Avatar.vue";
 import OutfitArt from "./OutfitArt.vue";
+import QuizArt from "./QuizArt.vue";
+import PlayerChaseBar from "./PlayerChaseBar.vue";
 import { checkpoints } from "../../shared/questions";
 import { formatTime } from "../lib/format";
+import { chaseDarkness } from "../lib/chaseDarkness";
 const {
   game,
   phase,
   players,
   elapsed,
+  monster,
   paused,
   code,
   feedback,
@@ -40,11 +43,22 @@ const {
   stunnedSeconds,
   submitAnswer,
   dismissFeedback,
+  questions,
+  wrongAnswerSeconds,
 } = inject("interview-app");
+const chaseVeil = computed(() => {
+  if (phase.value !== "racing" || me.value?.status !== "active") return 0;
+  return chaseDarkness(me.value.progress, monster.value);
+});
 </script>
 
 <template>
   <main class="player-main">
+    <div
+      class="player-chase-veil"
+      :style="{ opacity: chaseVeil }"
+      aria-hidden="true"
+    />
     <div class="player-top">
       <span class="room-mini"
         >ROOM {{ code.slice(0, 3) }} {{ code.slice(3) }}</span
@@ -88,8 +102,12 @@ const {
           seekers ready to go
         </div>
         <div class="player-rules">
-          <span><Check :size="16" /> Right answer? Move forward.</span
-          ><span><Timer :size="16" /> Wrong answer? 3-second penalty.</span
+          <span
+            ><Check :size="16" /> Clear each place’s questions to move
+            forward.</span
+          ><span
+            ><Timer :size="16" /> Wrong answer? {{ wrongAnswerSeconds }}-second
+            timeout.</span
           ><span><Ghost :size="16" /> Stay ahead of Unemployment.</span>
         </div>
       </div>
@@ -130,9 +148,21 @@ const {
             ><span>POINTS EARNED</span>
           </div>
           <div>
-            <strong>{{ me.progress }} / 5</strong
-            ><span>CHECKPOINTS PASSED</span>
+            <strong>{{ me.questionIndex }} / {{ questions.length }}</strong
+            ><span>QUESTIONS PASSED</span>
           </div>
+        </div>
+        <div
+          v-if="
+            me.status === 'finished' &&
+            feedback?.correct &&
+            feedback.questionIndex === questions.length - 1
+          "
+          class="feedback-panel correct final-explanation"
+          role="status"
+        >
+          <span class="eyebrow">FINAL ANSWER EXPLAINED</span>
+          <p>{{ feedback.explanation }}</p>
         </div>
         <div v-if="winners.length" class="mobile-winners">
           <h3>The interview goes to…</h3>
@@ -153,13 +183,13 @@ const {
       <template v-else>
         <div class="player-progress">
           <span
-            v-for="i in 5"
+            v-for="i in checkpoints.length"
             :key="i"
             :class="{
-              passed: i <= me.progress,
-              current: i === me.progress + 1,
+              passed: i - 1 < me.progress,
+              current: i - 1 === me.progress,
             }"
-            ><Check v-if="i <= me.progress" :size="14" /><span v-else>{{
+            ><Check v-if="i - 1 < me.progress" :size="14" /><span v-else>{{
               i
             }}</span></span
           >
@@ -168,6 +198,18 @@ const {
           <span><MapPin :size="14" />{{ checkpoints[me.progress].short }}</span
           ><span><Timer :size="15" />{{ formatTime(elapsed) }}</span>
         </div>
+        <PlayerChaseBar
+          :progress="me.progress"
+          :monster="monster"
+          :speed="game.monsterCurrentSpeed.value"
+          :target="game.monsterSpeed.value"
+          :base-speed="game.monsterBaseSpeed.value"
+          :snapshot-at="game.monsterSnapshotAt.value"
+          :paused="paused"
+          :connected="connected"
+          :avatar="me.avatar"
+          :name="me.name"
+        />
         <div v-if="paused" class="pause-notice">
           <Pause :size="17" /> The host paused the race. Take a breath.
         </div>
@@ -200,18 +242,29 @@ const {
               stunnedSeconds
                 ? `Try again in ${stunnedSeconds}s`
                 : feedback.correct
-                  ? "Next checkpoint"
+                  ? "Next question"
                   : "Try again"
             }}<ArrowRight v-if="!stunnedSeconds" :size="17" />
           </button>
         </div>
         <div v-else class="quiz-screen">
           <span class="eyebrow"
-            >QUESTION {{ me.progress + 1 }} OF 5 ·
+            >QUESTION {{ me.questionIndex + 1 }} OF {{ questions.length }} ·
             {{ currentQuestion.category }}</span
           >
           <h1>{{ currentQuestion.title }}</h1>
           <p class="quiz-prompt">{{ currentQuestion.prompt }}</p>
+          <img
+            v-if="currentQuestion.image"
+            class="quiz-uploaded-image"
+            :src="currentQuestion.image"
+            :alt="currentQuestion.imageAlt"
+          />
+          <QuizArt
+            v-else-if="currentQuestion.illustration"
+            :kind="currentQuestion.illustration"
+            class="quiz-context-art"
+          />
           <div
             :class="[
               'quiz-options',
@@ -230,11 +283,13 @@ const {
               "
               @click="submitAnswer(i)"
             >
-              <OutfitArt
+              <QuizArt
                 v-if="option.illustration"
                 :kind="option.illustration"
               /><span class="option-content"
-                ><span class="option-letter">{{ ["A", "B", "C"][i] }}</span
+                ><span class="option-letter">{{
+                  String.fromCharCode(65 + i)
+                }}</span
                 ><span
                   ><strong>{{ option.label }}</strong
                   ><small v-if="option.detail">{{ option.detail }}</small></span
@@ -252,13 +307,6 @@ const {
           <p v-if="feedback && !feedback.accepted" class="field-error">
             {{ feedback.message }}
           </p>
-          <div class="quiz-danger">
-            <Ghost :size="19" /><span
-              >Unemployment is catching up.<strong
-                >Trust yourself. Make your move.</strong
-              ></span
-            ><Zap :size="18" />
-          </div>
         </div>
       </template>
     </template>

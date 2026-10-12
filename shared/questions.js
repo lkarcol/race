@@ -10,21 +10,21 @@ export const checkpoints = [
   {
     name: "Hliny / Veľký Diel",
     short: "Hliny",
-    district: "First impressions",
+    district: "Decode the workplace",
     x: 268,
     y: 234,
   },
   {
     name: "Bulvár / Town Center",
     short: "Bulvár",
-    district: "Find your voice",
+    district: "Read the room",
     x: 412,
     y: 312,
   },
   {
     name: "Mariánske Námestie",
     short: "Mariánske",
-    district: "Show your strengths",
+    district: "Think on your feet",
     x: 538,
     y: 190,
   },
@@ -39,97 +39,89 @@ export const checkpoints = [
 
 export const questions = [
   {
-    id: "attire",
-    title: "Dress for the opportunity.",
-    category: "Dress code selection",
-    prompt: "What would you wear to an interview at SSE?",
-    type: "outfit",
+    id: "first-impressions",
+    title: "First impressions start at the door.",
+    category: "First impressions",
+    mapLabel: "First impressions",
+    prompt:
+      "According to the provided materials, what percentage of first impressions during a job interview is determined by how you dress, act, and walk through the door?",
+    type: "text",
+    illustration: "arrival",
+    options: [
+      { label: "7%" },
+      { label: "38%" },
+      { label: "47%" },
+      { label: "55%" },
+    ],
+  },
+  {
+    id: "corporate-lexicon",
+    title: "Decode the corporate lexicon.",
+    category: "Decoding the Lexicon",
+    mapLabel: "Corporate lexicon",
+    prompt:
+      'In corporate terminology ("Decoding the Lexicon"), what is the actual meaning of the phrase "Fast-paced environment"?',
+    type: "text",
     options: [
       {
-        label: "Keep it casual",
-        detail: "A comfy hoodie and trainers",
-        illustration: "hoodie",
+        label:
+          "Professional boundaries do not exist and managers send late-night texts.",
       },
       {
-        label: "Business casual",
-        detail: "A neat shirt and tailored trousers",
-        illustration: "business",
+        label:
+          "Complete organizational chaos where yesterday was the deadline.",
       },
       {
-        label: "Full formal",
-        detail: "A tuxedo and bow tie",
-        illustration: "formal",
+        label:
+          "Performing the work of three people for a significantly lower salary.",
+      },
+      {
+        label:
+          "An employer providing pizza parties instead of health insurance or overtime.",
       },
     ],
   },
   {
-    id: "posture",
-    title: "Let your confidence show.",
-    category: "Body language & posture",
-    prompt: "Which posture conveys confidence and respect?",
+    id: "behavioral-clues",
+    title: "Read the candidate’s body language.",
+    category: "Behavioral clues",
+    mapLabel: "Behavioral clues",
+    prompt:
+      'According to the behavioral clues classification, which candidate action indicates that the applicant is "overconfident"?',
     type: "posture",
     options: [
+      { label: "Tapping a foot quickly up and down", illustration: "nervous" },
       {
-        label: "Closed off",
-        detail: "Slouching with arms crossed",
-        illustration: "closed",
+        label: "Frowning and scratching their head",
+        illustration: "uncertain",
       },
       {
-        label: "Open and natural",
-        detail: "Sit upright, relax, and make eye contact",
-        illustration: "open",
+        label: "Sitting back in a chair with legs outstretched",
+        illustration: "overconfident",
       },
       {
-        label: "Take over the room",
-        detail: "Lean forward and point assertively",
-        illustration: "aggressive",
+        label: "Using hands and face to express themselves",
+        illustration: "expressive",
       },
     ],
   },
   {
-    id: "intro",
-    title: "Make your introduction count.",
-    category: "Your elevator pitch",
+    id: "brain-teasers",
+    title: "Think your way through a brain teaser.",
+    category: "Tricky brain teasers",
+    mapLabel: "Brain teasers",
     prompt:
-      "How should you start your intro when asked “Tell me about yourself”?",
+      'How does the presentation script advise candidates to tackle tricky brain teasers such as "Why are manhole covers round?"',
     type: "text",
+    illustration: "manhole",
     options: [
-      { label: "Share your personal hobbies and childhood stories." },
+      { label: "Decline to answer and redirect to personal achievements." },
+      { label: "Admit complete ignorance to show honesty and integrity." },
       {
         label:
-          "Give a concise overview of your education, skills, and alignment with SSE.",
+          'Use confidence with terms like "geometry" or pivot philosophically.',
       },
-      { label: "Explain your salary expectations immediately." },
-    ],
-  },
-  {
-    id: "weakness",
-    title: "Turn honesty into strength.",
-    category: "Handling difficult questions",
-    prompt: "What is the best way to explain a professional weakness?",
-    type: "text",
-    options: [
-      { label: "“I have no weaknesses.”" },
-      {
-        label:
-          "Mention a genuine area of improvement and steps you are taking to grow.",
-      },
-      { label: "Blame past professors or employers." },
-    ],
-  },
-  {
-    id: "employer",
-    title: "Curiosity opens doors.",
-    category: "Questions for the employer",
-    prompt:
-      "What is an appropriate question to ask the interviewer at the end?",
-    type: "text",
-    options: [
-      { label: "“How soon can I take vacation?”" },
-      {
-        label: "“What does a typical day look like in this department at SSE?”",
-      },
-      { label: "“Do you track working hours strictly?”" },
+      { label: "Calculate precise mathematical dimensions on paper." },
     ],
   },
 ];
