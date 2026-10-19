@@ -1,10 +1,10 @@
 export const MONSTER_SPEED = Object.freeze({
-  min: 0.5,
+  min: 0.1,
   max: 2,
   step: 0.01,
   default: 1,
   smoothingSeconds: 0.35,
-  base: 0.2,
+  base: 0.16,
 });
 
 export function isValidMonsterSpeed(value) {

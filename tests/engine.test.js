@@ -131,7 +131,7 @@ test("the shadow starts with the race and eliminates trailing players", () => {
   advance(1000);
   assert.ok(engine.monster > -0.65);
   assert.equal(engine.players.get("p").status, "active");
-  advance(3000);
+  advance(4000);
   assert.equal(engine.players.get("p").status, "caught");
   assert.equal(engine.phase, "finished");
 });
@@ -208,11 +208,11 @@ test("faster correct answers score higher and capacity is enforced", () => {
 test("monster speed accepts bounded hundredth-step numeric multipliers", () => {
   const { engine } = fixture();
   assert.equal(engine.monsterSpeed, 1);
-  for (const invalid of [0, 0.25, 2.25, -1, 1.001, NaN, Infinity, "2", null]) {
+  for (const invalid of [0, 0.05, 2.25, -1, 1.001, NaN, Infinity, "2", null]) {
     assert.equal(engine.setMonsterSpeed(invalid), false);
     assert.equal(engine.monsterSpeed, 1);
   }
-  for (const speed of [0.5, 0.51, 0.75, 1, 1.25, 1.37, 1.5, 1.75, 1.99, 2]) {
+  for (const speed of [0.1, 0.25, 0.5, 0.51, 0.75, 1, 1.25, 1.37, 1.5, 1.75, 1.99, 2]) {
     assert.equal(engine.setMonsterSpeed(speed), true);
     assert.equal(engine.monsterSpeed, speed);
   }
