@@ -252,8 +252,7 @@ const chaseVeil = computed(() => {
             >QUESTION {{ me.questionIndex + 1 }} OF {{ questions.length }} ·
             {{ currentQuestion.category }}</span
           >
-          <h1>{{ currentQuestion.title }}</h1>
-          <p class="quiz-prompt">{{ currentQuestion.prompt }}</p>
+          <h4>{{currentQuestion.prompt}}</h4>
           <img
             v-if="currentQuestion.image"
             class="quiz-uploaded-image"
